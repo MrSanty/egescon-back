@@ -1,13 +1,23 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { User } from '@prisma/client';
 
 export interface Tokens {
   accessToken: string;
   refreshToken: string;
+}
+
+interface LoginResponse {
+  tokens: Tokens;
+  user: User;
 }
 
 @Injectable()
@@ -47,29 +57,41 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  async validateUser(loginDto: LoginDto): Promise<any> {
+  async login({ email, password }: LoginDto): Promise<LoginResponse> {
     const user = await this.prisma.user.findUnique({
-      where: { email: loginDto.email },
+      where: { email },
+      include: {
+        roles: {
+          include: {
+            permissions: {
+              include: {
+                permission: {
+                  include: {
+                    menus: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
 
-    if (
-      user &&
-      user.isActive &&
-      (await bcrypt.compare(loginDto.password, user.password))
-    ) {
-      const { password, ...result } = user;
-      return result;
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      throw new UnauthorizedException(
+        'El usuario no existe o la contraseña es incorrecta.',
+      );
     }
-    return null;
-  }
 
-  async login(user: any): Promise<Tokens> {
     const tokens = await this._generateTokens({
-      sub: user.id,
-      email: user.email,
+      sub: user?.id,
+      email: user?.email,
     });
     await this._updateRefreshTokenHash(user.id, tokens.refreshToken);
-    return tokens;
+    return {
+      tokens: tokens,
+      user,
+    };
   }
 
   async logout(userId: string): Promise<boolean> {

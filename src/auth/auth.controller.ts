@@ -9,10 +9,11 @@ import {
   Req,
 } from '@nestjs/common';
 import { AuthService, Tokens } from './auth.service';
-import type { LoginDto } from './dto/login.dto';
+import { LoginDto } from './dto/login.dto';
 import type { Response, Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Public } from './decorators/public.decorator';
+import { LoginUserEntity } from './entities/login-user.entity';
 
 @Controller('auth')
 export class AuthController {
@@ -36,16 +37,10 @@ export class AuthController {
   async login(
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) res: Response,
-  ) {
-    const user = await this.authService.validateUser(loginDto);
-    if (!user) {
-      throw new UnauthorizedException(
-        'Credenciales incorrectas o usuario inactivo.',
-      );
-    }
-    const tokens = await this.authService.login(user);
-    this._setCookies(res, tokens);
-    return { message: 'Login exitoso' };
+  ): Promise<LoginUserEntity> {
+    const data = await this.authService.login(loginDto);
+    this._setCookies(res, data.tokens);
+    return new LoginUserEntity(data);
   }
 
   @Public()
