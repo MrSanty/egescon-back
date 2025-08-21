@@ -1,15 +1,204 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-generator client {
-  provider = "prisma-client-js"
-  output   = "../generated/prisma"
-}
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// --------------------------------------------------
+//                      ENUMS
+// --------------------------------------------------
+
+enum DocType {
+  CC
+  CE
+  PPT
+  PASSPORT
+}
+
+enum PersonType {
+  NATURAL
+  JURIDICO
+}
+
+enum ContractRole {
+  SUPERVISOR
+  EXPENDITURE_AUTHORIZER
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+}
+
+// =================================================================
+//                      MODELS
+// =================================================================
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  nit       String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       User[]
+  roles       Role[]
+  contractors Contractor[]
+  contracts   Contract[]
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  docType            DocType  @default(CC)
+  docNum             String   @unique
+  name               String
+  email              String   @unique
+  password           String
+  isActive           Boolean  @default(true)
+  hashedRefreshToken String?  @unique
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  roles             Role[]
+  assignedContracts UserContract[]
+  contractor        Contractor?
+  company           Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId         String
+
+  @@index([companyId])
+  @@index([email])
+  @@index([docNum])
+  @@index([name])
+  @@index([isActive])
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  companyId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  permissions RolePermission[]
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([name, companyId])
+  @@index([companyId])
+}
+
+model Permission {
+  id          String  @id @default(cuid())
+  action      String  @unique
+  description String?
+
+  roles RolePermission[]
+  menus Menu[]
+}
+
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String
+  permissionId String
+  assignedAt   DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model Contractor {
+  id          String     @id @default(cuid())
+  companyName String
+  nit         String
+  personType  PersonType
+  phoneNumber String
+  address     String
+  userId      String     @unique
+  companyId   String
+
+  contracts Contract[]
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([nit, companyId])
+  @@index([companyId])
+  @@index([userId])
+  @@index([nit])
+}
+
+model Contract {
+  id           String   @id @default(cuid())
+  filed        String
+  genObject    String   @db.Text
+  dateInit     DateTime
+  dateEnd      DateTime
+  totalAmount  Decimal  @db.Decimal(18, 2)
+  cdp          String
+  rpc          String
+  contractorId String
+  companyId    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  objects String[]
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  contractor Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+
+  assignedUsers UserContract[]
+  paymentPlans  PaymentPlan[]
+
+  @@unique([filed, companyId])
+  @@index([companyId])
+  @@index([contractorId])
+}
+
+model UserContract {
+  id             String       @id @default(cuid())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  contract       Contract     @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractId     String
+  roleInContract ContractRole
+  assignedAt     DateTime     @default(now())
+
+  @@unique([userId, contractId])
+  @@index([userId])
+  @@index([contractId])
+}
+
+model PaymentPlan {
+  id            String        @id @default(cuid())
+  contract      Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractId    String
+  paymentNumber Int
+  scheduledDate DateTime
+  amount        Decimal       @db.Decimal(18, 2)
+  status        PaymentStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([contractId])
+}
+
+model Menu {
+  id           String   @id @default(cuid())
+  name         String
+  icon         String
+  permissionId String
+  parent       String? // Lo usamos para agrupar en el frontend, ej: "Configuración"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@index([permissionId])
 }
