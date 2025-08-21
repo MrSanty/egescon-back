@@ -1,44 +1,34 @@
 import {
-  ArgumentsHost,
-  Catch,
   ExceptionFilter,
+  Catch,
+  ArgumentsHost,
   HttpException,
-  HttpStatus,
 } from '@nestjs/common';
+import { Request, Response } from 'express';
 
-@Catch()
+@Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: HttpException, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
-    const response = ctx.getResponse();
-    const request = ctx.getRequest();
-    const statusCode = response.statusCode;
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
 
+    const statusCode = exception.getStatus();
     const exceptionResponse = exception.getResponse();
-    let errorMessage: string;
-    let errorDetails: any = null;
 
-    if (typeof exceptionResponse === 'string') {
-      errorMessage = exceptionResponse;
-    } else if (
-      typeof exceptionResponse === 'object' &&
-      exceptionResponse !== null
-    ) {
-      errorMessage =
-        (exceptionResponse as any).message ||
-        'Ha ocurrido un error inesperado.';
-      errorDetails = exceptionResponse;
-    } else {
-      errorMessage = 'Ha ocurrido un error inesperado en el servidor.';
-    }
+    const errorMessage =
+      typeof exceptionResponse === 'string'
+        ? exceptionResponse
+        : (exceptionResponse as any).message;
 
     response.status(statusCode).json({
       status: 'error',
       statusCode,
       error: {
-        message: errorMessage,
-        code: HttpStatus[statusCode]?.replace(/_/g, ' ') || 'UNEXPECTED_ERROR',
-        details: errorDetails,
+        message: Array.isArray(errorMessage)
+          ? errorMessage.join(', ')
+          : errorMessage,
+        details: exceptionResponse,
         path: request.url,
         timestamp: new Date().toISOString(),
       },
