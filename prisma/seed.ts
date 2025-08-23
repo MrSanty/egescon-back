@@ -6,38 +6,29 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Iniciando el proceso de seeding...');
 
+  // --- CREACIÓN DE PERMISOS (sin cambios) ---
   const permissionsToCreate = [
-    // --- GESTIÓN DE ROLES ---
+    // ... tu lista de permisos es correcta, la dejamos igual
     { action: 'role:create', description: 'Crear roles' },
     { action: 'role:read', description: 'Leer roles' },
     { action: 'role:update', description: 'Actualizar roles' },
     { action: 'role:delete', description: 'Eliminar roles' },
     { action: 'role:assign', description: 'Asignar roles' },
     { action: 'role:revoke', description: 'Revocar roles' },
-
-    // --- EMPRESA ---
     { action: 'company:create', description: 'Crear empresas' },
     { action: 'company:read', description: 'Leer empresas' },
     { action: 'company:update', description: 'Actualizar empresas' },
     { action: 'company:delete', description: 'Eliminar empresas' },
-
-    // --- GESTIÓN DE USUARIOS ---
     { action: 'user:create', description: 'Crear usuarios' },
     { action: 'user:read', description: 'Leer usuarios' },
     { action: 'user:update', description: 'Actualizar usuarios' },
     { action: 'user:delete', description: 'Eliminar usuarios' },
     { action: 'user:delegate', description: 'Tener un delegado' },
-
-    // --- GESTIÓN DE PARAMETROS ---
     { action: 'parameters:update', description: 'Actualizar parámetros' },
-
-    // --- GESTION DE CONTRATOS ---
     { action: 'contract:create', description: 'Crear contratos' },
     { action: 'contract:read', description: 'Leer contratos' },
     { action: 'contract:update', description: 'Actualizar contratos' },
     { action: 'contract:delete', description: 'Eliminar contratos' },
-
-    // --- GESTION DE INFORMES ---
     { action: 'reports:create', description: 'Crear informes' },
     { action: 'reports:read', description: 'Leer informes' },
     { action: 'reports:update', description: 'Actualizar informes' },
@@ -55,6 +46,8 @@ async function main() {
   }
   console.log('Permisos creados exitosamente.');
 
+  // --- CREACIÓN DE MENÚS (sin cambios) ---
+  // Tu lógica para crear menús es correcta, la dejamos igual.
   console.log('Consultando permisos para los menús...');
   const userReadPermission = await prisma.permission.findUnique({
     where: { action: 'user:read' },
@@ -74,7 +67,6 @@ async function main() {
   const reportsReadPermission = await prisma.permission.findUnique({
     where: { action: 'reports:read' },
   });
-
   if (
     !userReadPermission ||
     !companyReadPermission ||
@@ -84,13 +76,11 @@ async function main() {
     !reportsReadPermission
   ) {
     throw new Error(
-      'No se encontraron los permisos necesarios para crear los menús. Asegúrate de que están definidos en permissionsToCreate.',
+      'No se encontraron los permisos necesarios para crear los menús.',
     );
   }
-
   console.log('Creando los menús...');
   await prisma.menu.deleteMany({});
-
   const menusToCreate = [
     {
       name: 'Contratos',
@@ -104,7 +94,6 @@ async function main() {
       permissionId: reportsReadPermission.id,
       parent: 'Ejecución',
     },
-
     {
       name: 'Usuarios',
       icon: 'users',
@@ -117,7 +106,6 @@ async function main() {
       permissionId: companyReadPermission.id,
       parent: 'Configuración',
     },
-
     {
       name: 'Roles',
       icon: 'shield',
@@ -131,28 +119,53 @@ async function main() {
       parent: 'Configuración',
     },
   ];
-
   for (const menu of menusToCreate) {
-    await prisma.menu.create({
-      data: menu,
-    });
+    await prisma.menu.create({ data: menu });
   }
   console.log('Menús creados exitosamente.');
 
+  // --- CREACIÓN DE LA EMPRESA "MADRE" (sin cambios) ---
   console.log('Creando la empresa eGescon...');
-  const company = await prisma.company.create({
-    data: {
+  const company = await prisma.company.upsert({
+    where: { nit: '900.123.456-7' },
+    update: {},
+    create: {
       name: 'eGescon',
       nit: '900.123.456-7',
     },
   });
-  console.log(`Empresa creada con ID: ${company.id}`);
+  console.log(`Empresa creada/encontrada con ID: ${company.id}`);
+
+  // --- NUEVO: CREACIÓN DEL ROL "SUPER ADMIN" ---
+  console.log('Creando el rol de Super Administrador...');
+  const superAdminRole = await prisma.role.create({
+    data: {
+      name: 'Super Admin',
+      description: 'Rol con todos los permisos del sistema.',
+      companyId: company.id,
+    },
+  });
+  console.log(`Rol Super Admin creado con ID: ${superAdminRole.id}`);
+
+  console.log('Asignando todos los permisos al rol Super Admin...');
+  const allPermissions = await prisma.permission.findMany();
+  for (const permission of allPermissions) {
+    await prisma.rolePermission.create({
+      data: {
+        roleId: superAdminRole.id,
+        permissionId: permission.id,
+      },
+    });
+  }
+  console.log('Todos los permisos han sido asignados al rol Super Admin.');
 
   console.log('Creando el usuario administrador...');
   const hashedPassword = await bcrypt.hash('ContrasenaSegura123!', 10);
 
-  const user = await prisma.user.create({
-    data: {
+  const adminUser = await prisma.user.upsert({
+    where: { email: 'admin@egescon.com' },
+    update: {},
+    create: {
       docType: DocType.CC,
       docNum: '1020304050',
       name: 'Administrador eGescon',
@@ -160,10 +173,11 @@ async function main() {
       password: hashedPassword,
       isActive: true,
       companyId: company.id,
+      roleId: superAdminRole.id,
     },
   });
   console.log(
-    `Usuario creado con ID: ${user.id} para la empresa ${company.name}`,
+    `Usuario administrador creado/encontrado con ID: ${adminUser.id} y rol Super Admin.`,
   );
 
   console.log('Seeding finalizado exitosamente!');

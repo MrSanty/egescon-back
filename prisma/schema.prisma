@@ -63,12 +63,14 @@ model User {
   hashedRefreshToken String?  @unique
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+  roleId             String
+  companyId          String
 
-  roles             Role[]
   assignedContracts UserContract[]
   contractor        Contractor?
+
+  role              Role   @relation(fields: [roleId], references: [id])
   company           Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  companyId         String
 
   @@index([companyId])
   @@index([email])
@@ -194,7 +196,7 @@ model Menu {
   name         String
   icon         String
   permissionId String
-  parent       String? // Lo usamos para agrupar en el frontend, ej: "Configuración"
+  parent       String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
