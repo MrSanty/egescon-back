@@ -3,8 +3,17 @@ import {
   Catch,
   ArgumentsHost,
   HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+
+const ERROR_CODES = {
+  [HttpStatus.BAD_REQUEST]: 'BAD_REQUEST',
+  [HttpStatus.UNAUTHORIZED]: 'UNAUTHORIZED',
+  [HttpStatus.FORBIDDEN]: 'FORBIDDEN',
+  [HttpStatus.NOT_FOUND]: 'NOT_FOUND',
+  [HttpStatus.INTERNAL_SERVER_ERROR]: 'INTERNAL_SERVER_ERROR',
+};
 
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -16,22 +25,40 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const statusCode = exception.getStatus();
     const exceptionResponse = exception.getResponse();
 
-    const errorMessage =
-      typeof exceptionResponse === 'string'
-        ? exceptionResponse
-        : (exceptionResponse as any).message;
+    let message: string;
+    let fields: any = null;
 
-    response.status(statusCode).json({
+    if (typeof exceptionResponse === 'string') {
+      message = exceptionResponse;
+    } else {
+      const res = exceptionResponse as any;
+      message = res.message || 'Ha ocurrido un error inesperado.';
+
+      if (res.message) {
+        delete res.message;
+      }
+
+      const keys = Object.keys(res);
+      if (!(keys.length === 1 && keys[0] === 'statusCode')) {
+        if (keys.length > 0) {
+          fields = res;
+        }
+      }
+    }
+
+    const errorResponse: any = {
       status: 'error',
       statusCode,
-      error: {
-        message: Array.isArray(errorMessage)
-          ? errorMessage.join(', ')
-          : errorMessage,
-        details: exceptionResponse,
-        path: request.url,
-        timestamp: new Date().toISOString(),
-      },
-    });
+      path: request.url,
+      timestamp: new Date().toISOString(),
+      errorCode: ERROR_CODES[statusCode] || 'UNKNOWN_ERROR',
+      message,
+    };
+
+    if (fields) {
+      errorResponse.fields = fields;
+    }
+
+    response.status(statusCode).json(errorResponse);
   }
 }
