@@ -8,17 +8,9 @@ import { ConfigService } from '@nestjs/config';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { User } from '@prisma/client';
-
-export interface Tokens {
-  accessToken: string;
-  refreshToken: string;
-}
-
-interface LoginResponse {
-  tokens: Tokens;
-  user: User;
-}
+import { Menu, User } from '@prisma/client';
+import { LoginUserEntity } from './entities/login-user.entity';
+import { LoginResponse, MenuDto, PayloadUser, Tokens } from './types/types';
 
 @Injectable()
 export class AuthService {
@@ -40,10 +32,7 @@ export class AuthService {
     });
   }
 
-  private async _generateTokens(payload: {
-    sub: string;
-    email: string;
-  }): Promise<Tokens> {
+  private async _generateTokens(payload: PayloadUser): Promise<Tokens> {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
@@ -60,14 +49,26 @@ export class AuthService {
   async login({ email, password }: LoginDto): Promise<LoginResponse> {
     const user = await this.prisma.user.findUnique({
       where: { email },
-      include: {
-        roles: {
-          include: {
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        password: true,
+        role: {
+          select: {
             permissions: {
-              include: {
+              select: {
                 permission: {
-                  include: {
-                    menus: true,
+                  select: {
+                    action: true,
+                    menus: {
+                      select: {
+                        id: true,
+                        name: true,
+                        icon: true,
+                        parent: true,
+                      },
+                    },
                   },
                 },
               },
@@ -83,14 +84,36 @@ export class AuthService {
       );
     }
 
+    const permissionsSet = new Set<string>();
+    const menuMap = new Map<string, MenuDto>();
+
+    user.role.permissions.forEach((rolePermission) => {
+      permissionsSet.add(rolePermission.permission.action);
+      rolePermission.permission.menus.forEach((menuItem) => {
+        menuMap.set(menuItem.name, menuItem);
+      });
+    });
+
+    const dataUser = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      permissions: [...permissionsSet],
+      menus: [...menuMap.values()],
+    };
+
     const tokens = await this._generateTokens({
       sub: user?.id,
       email: user?.email,
+      name: user?.name,
+      permissions: [...permissionsSet],
+      menus: [...menuMap.values()],
     });
+
     await this._updateRefreshTokenHash(user.id, tokens.refreshToken);
     return {
       tokens: tokens,
-      user,
+      ...dataUser,
     };
   }
 
@@ -108,7 +131,9 @@ export class AuthService {
   async refreshToken(userId: string, refreshToken: string): Promise<Tokens> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.hashedRefreshToken) {
-      throw new ForbiddenException('Access Denied');
+      throw new ForbiddenException(
+        'Token de actualización no válido, por favor inicie sesión nuevamente.',
+      );
     }
 
     const tokensMatch = await bcrypt.compare(
@@ -116,12 +141,17 @@ export class AuthService {
       user.hashedRefreshToken,
     );
     if (!tokensMatch) {
-      throw new ForbiddenException('Access Denied');
+      throw new ForbiddenException(
+        'Token de actualización no válido, por favor inicie sesión nuevamente.',
+      );
     }
 
     const newTokens = await this._generateTokens({
       sub: user.id,
       email: user.email,
+      name: user.name,
+      permissions: [...permissionsSet],
+      menus: [...menuMap.values()],
     });
     await this._updateRefreshTokenHash(user.id, newTokens.refreshToken);
     return newTokens;

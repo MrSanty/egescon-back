@@ -2,18 +2,19 @@ import {
   Controller,
   Post,
   Body,
-  UnauthorizedException,
   Res,
   UseGuards,
   Get,
   Req,
 } from '@nestjs/common';
-import { AuthService, Tokens } from './auth.service';
+import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import type { Response, Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Public } from './decorators/public.decorator';
+import { ResponseMessage } from 'src/common/decorators/response-message.decorator';
 import { LoginUserEntity } from './entities/login-user.entity';
+import { Tokens } from './types/types';
 
 @Controller('auth')
 export class AuthController {
@@ -25,26 +26,23 @@ export class AuthController {
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
     });
-    res.cookie('refresh_token', tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-    });
   }
 
   @Public()
+  @ResponseMessage('Inicio de sesión exitoso')
   @Post('login')
   async login(
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<LoginUserEntity> {
-    const data = await this.authService.login(loginDto);
-    this._setCookies(res, data.tokens);
+    const { tokens, ...data } = await this.authService.login(loginDto);
+    this._setCookies(res, tokens);
     return new LoginUserEntity(data);
   }
 
   @Public()
   @UseGuards(AuthGuard('jwt-refresh'))
+  @ResponseMessage('Tokens actualizados exitosamente')
   @Get('refresh')
   async refreshToken(
     @Req() req: Request,
@@ -56,15 +54,16 @@ export class AuthController {
       user.refreshToken,
     );
     this._setCookies(res, tokens);
-    return { message: 'Token refrescado' };
+    return true;
   }
 
+  @ResponseMessage('Se ha cerrado la sesión exitosamente')
   @Post('logout')
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const user = req.user as any;
     await this.authService.logout(user.sub);
     res.clearCookie('access_token');
     res.clearCookie('refresh_token');
-    return { message: 'Logout exitoso' };
+    return true;
   }
 }

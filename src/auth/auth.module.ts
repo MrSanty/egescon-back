@@ -7,7 +7,6 @@ import { AccessTokenStrategy } from './strategies/access-token.strategy';
 import { RefreshTokenStrategy } from './strategies/refresh-token.strategy';
 import { PrismaModule } from 'src/prisma/prisma.module';
 import { AccessTokenGuard } from './guards/access-token.guard';
-import { ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [PrismaModule, PassportModule, JwtModule.register({})],
@@ -16,8 +15,7 @@ import { ConfigService } from '@nestjs/config';
     AuthService,
     AccessTokenStrategy,
     RefreshTokenStrategy,
-    AccessTokenGuard,
-    ConfigService,
+    AccessTokenGuard
   ],
 })
 export class AuthModule {}
