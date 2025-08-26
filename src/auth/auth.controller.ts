@@ -15,6 +15,7 @@ import { Public } from './decorators/public.decorator';
 import { ResponseMessage } from 'src/common/decorators/response-message.decorator';
 import { LoginUserEntity } from './entities/login-user.entity';
 import { Tokens } from './types/types';
+import { User } from '@prisma/client';
 
 @Controller('auth')
 export class AuthController {
@@ -22,6 +23,11 @@ export class AuthController {
 
   private _setCookies(res: Response, tokens: Tokens) {
     res.cookie('access_token', tokens.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+    });
+    res.cookie('refresh_token', tokens.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
@@ -50,7 +56,7 @@ export class AuthController {
   ) {
     const user = req.user as any;
     const tokens = await this.authService.refreshToken(
-      user.sub,
+      user.id,
       user.refreshToken,
     );
     this._setCookies(res, tokens);

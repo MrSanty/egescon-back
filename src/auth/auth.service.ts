@@ -3,14 +3,18 @@ import {
   ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
+import {
+  LoginResponse,
+  MenuDto,
+  PayloadUser,
+  Tokens,
+  UserPermissions,
+} from './types/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { Menu, User } from '@prisma/client';
-import { LoginUserEntity } from './entities/login-user.entity';
-import { LoginResponse, MenuDto, PayloadUser, Tokens } from './types/types';
 
 @Injectable()
 export class AuthService {
@@ -44,6 +48,23 @@ export class AuthService {
       }),
     ]);
     return { accessToken, refreshToken };
+  }
+
+  private async _getUserPermissions(user): Promise<UserPermissions> {
+    const permissionsSet = new Set<string>();
+    const menuMap = new Map<string, MenuDto>();
+
+    user.role.permissions.forEach((rolePermission) => {
+      permissionsSet.add(rolePermission.permission.action);
+      rolePermission.permission.menus.forEach((menuItem) => {
+        menuMap.set(menuItem.name, menuItem);
+      });
+    });
+
+    return {
+      actions: [...permissionsSet],
+      menus: [...menuMap.values()],
+    };
   }
 
   async login({ email, password }: LoginDto): Promise<LoginResponse> {
@@ -84,30 +105,18 @@ export class AuthService {
       );
     }
 
-    const permissionsSet = new Set<string>();
-    const menuMap = new Map<string, MenuDto>();
-
-    user.role.permissions.forEach((rolePermission) => {
-      permissionsSet.add(rolePermission.permission.action);
-      rolePermission.permission.menus.forEach((menuItem) => {
-        menuMap.set(menuItem.name, menuItem);
-      });
-    });
+    const userPermissions = await this._getUserPermissions(user);
 
     const dataUser = {
       id: user.id,
       email: user.email,
       name: user.name,
-      permissions: [...permissionsSet],
-      menus: [...menuMap.values()],
+      permissions: userPermissions.actions,
+      menus: userPermissions.menus,
     };
 
     const tokens = await this._generateTokens({
-      sub: user?.id,
-      email: user?.email,
-      name: user?.name,
-      permissions: [...permissionsSet],
-      menus: [...menuMap.values()],
+      ...dataUser,
     });
 
     await this._updateRefreshTokenHash(user.id, tokens.refreshToken);
@@ -129,7 +138,39 @@ export class AuthService {
   }
 
   async refreshToken(userId: string, refreshToken: string): Promise<Tokens> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        hashedRefreshToken: true,
+        role: {
+          select: {
+            id: true,
+            name: true,
+            permissions: {
+              select: {
+                permission: {
+                  select: {
+                    action: true,
+                    menus: {
+                      select: {
+                        id: true,
+                        name: true,
+                        icon: true,
+                        parent: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
     if (!user || !user.hashedRefreshToken) {
       throw new ForbiddenException(
         'Token de actualización no válido, por favor inicie sesión nuevamente.',
@@ -146,13 +187,16 @@ export class AuthService {
       );
     }
 
+    const userPermissions = await this._getUserPermissions(user);
+
     const newTokens = await this._generateTokens({
-      sub: user.id,
+      id: user.id,
       email: user.email,
       name: user.name,
-      permissions: [...permissionsSet],
-      menus: [...menuMap.values()],
+      permissions: userPermissions.actions,
+      menus: userPermissions.menus,
     });
+
     await this._updateRefreshTokenHash(user.id, newTokens.refreshToken);
     return newTokens;
   }

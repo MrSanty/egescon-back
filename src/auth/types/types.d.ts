@@ -15,9 +15,14 @@ interface LoginResponse extends LoginUserEntity {
 }
 
 export class PayloadUser {
-  sub: string;
+  id: string;
   email: string;
   name: string;
   permissions: string[];
+  menus: MenuDto[];
+}
+
+export interface UserPermissions {
+  actions: string[];
   menus: MenuDto[];
 }
