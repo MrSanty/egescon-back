@@ -75,6 +75,7 @@ export class AuthService {
         email: true,
         name: true,
         password: true,
+        companyId: true,
         role: {
           select: {
             permissions: {
@@ -111,6 +112,7 @@ export class AuthService {
       id: user.id,
       email: user.email,
       name: user.name,
+      companyId: user.companyId,
       permissions: userPermissions.actions,
       menus: userPermissions.menus,
     };
@@ -145,6 +147,7 @@ export class AuthService {
         email: true,
         name: true,
         hashedRefreshToken: true,
+        companyId: true,
         role: {
           select: {
             id: true,
@@ -193,6 +196,7 @@ export class AuthService {
       id: user.id,
       email: user.email,
       name: user.name,
+      companyId: user.companyId,
       permissions: userPermissions.actions,
       menus: userPermissions.menus,
     });

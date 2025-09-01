@@ -6,6 +6,8 @@ import {
   UseGuards,
   Get,
   Req,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -14,8 +16,9 @@ import { AuthGuard } from '@nestjs/passport';
 import { Public } from './decorators/public.decorator';
 import { ResponseMessage } from 'src/common/decorators/response-message.decorator';
 import { LoginUserEntity } from './entities/login-user.entity';
-import { Tokens } from './types/types';
+import { PayloadUser, Tokens } from './types/types';
 import { User } from '@prisma/client';
+import { ApiCookieAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 @Controller('auth')
 export class AuthController {
@@ -35,6 +38,14 @@ export class AuthController {
   }
 
   @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Iniciar sesión de usuario' })
+  @ApiResponse({
+    status: 200,
+    description: 'Inicio de sesión exitoso.',
+    type: LoginUserEntity,
+  })
+  @ApiResponse({ status: 401, description: 'Credenciales incorrectas.' })
   @ResponseMessage('Inicio de sesión exitoso')
   @Post('login')
   async login(
@@ -47,6 +58,10 @@ export class AuthController {
   }
 
   @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Actualizar token de acceso' })
+  @ApiResponse({ status: 200, description: 'Token de acceso actualizado.' })
+  @ApiResponse({ status: 401, description: 'No autorizado.' })
   @UseGuards(AuthGuard('jwt-refresh'))
   @ResponseMessage('Tokens actualizados exitosamente')
   @Get('refresh')
@@ -54,7 +69,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const user = req.user as any;
+    const user = req.user as PayloadUser & { refreshToken: string };
     const tokens = await this.authService.refreshToken(
       user.id,
       user.refreshToken,
@@ -63,6 +78,10 @@ export class AuthController {
     return true;
   }
 
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'Cerrar sesión del usuario' })
+  @ApiResponse({ status: 200, description: 'Sesión cerrada exitosamente.' })
+  @ApiResponse({ status: 401, description: 'No autorizado.' })
   @ResponseMessage('Se ha cerrado la sesión exitosamente')
   @Post('logout')
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {

@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { ValidationError } from 'class-validator';
 import { formatValidationErrors } from './lib/formatErrors';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { PermissionsGuard } from './auth/guards/permissions.guard';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -23,6 +25,17 @@ async function bootstrap() {
 
   app.use(cookieParser());
   app.use(helmet());
+
+  app.setGlobalPrefix('api');
+
+  const config = new DocumentBuilder()
+    .setTitle('API eGescon')
+    .setDescription('Documentación de la API para el sistema eGescon')
+    .setVersion('1.0')
+    .addCookieAuth('access_token') // Esto nos permitirá probar endpoints protegidos
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api-docs', app, document);
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -42,8 +55,11 @@ async function bootstrap() {
     new TransformationInterceptor(app.get(Reflector)),
   );
   app.useGlobalFilters(new HttpExceptionFilter());
-  app.useGlobalGuards(new AccessTokenGuard(app.get(Reflector)));
+  app.useGlobalGuards(
+    new AccessTokenGuard(app.get(Reflector)),
+    new PermissionsGuard(app.get(Reflector)),
+  );
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 8080);
 }
 bootstrap();

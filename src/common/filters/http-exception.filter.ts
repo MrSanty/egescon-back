@@ -31,17 +31,21 @@ export class HttpExceptionFilter implements ExceptionFilter {
     if (typeof exceptionResponse === 'string') {
       message = exceptionResponse;
     } else {
-      const res = exceptionResponse as any;
+      const res = { ...(exceptionResponse as any) };
       message = res.message || 'Ha ocurrido un error inesperado.';
 
-      if (res.message) {
-        delete res.message;
-      }
+      delete res.message;
+      delete res.statusCode;
+      delete res.error;
 
-      const keys = Object.keys(res);
-      if (!(keys.length === 1 && keys[0] === 'statusCode')) {
-        if (keys.length > 0) {
-          fields = res;
+      const remainingKeys = Object.keys(res);
+
+      if (remainingKeys.length > 0) {
+        for (const key of remainingKeys) {
+          if (Array.isArray(res[key])) {
+            const messages = res[key].map((error) => error.message);
+            fields.push(...messages);
+          }
         }
       }
     }

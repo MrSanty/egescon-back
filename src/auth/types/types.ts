@@ -1,3 +1,5 @@
+import { LoginUserEntity } from '../entities/login-user.entity';
+
 export class MenuDto {
   id: string;
   name: string;
@@ -10,7 +12,7 @@ export interface Tokens {
   refreshToken: string;
 }
 
-interface LoginResponse extends LoginUserEntity {
+export interface LoginResponse extends LoginUserEntity {
   tokens: Tokens;
 }
 
@@ -18,6 +20,7 @@ export class PayloadUser {
   id: string;
   email: string;
   name: string;
+  companyId: string;
   permissions: string[];
   menus: MenuDto[];
 }
